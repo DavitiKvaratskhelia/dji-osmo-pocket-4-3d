@@ -1182,12 +1182,35 @@ async function main() {
   // 4.9 mm apart (5.6 mm vertical pitch, measured on the official rear photo).
   const RIB_SP = 4.9, RIB_ANG = THREE.MathUtils.degToRad(29);
   const RIB_TU = RIB_SP / Math.sin(RIB_ANG), RIB_TV = RIB_SP / Math.cos(RIB_ANG);
+  // The surface is flat; the grooves are recessed channels (steep walls, flat floor), never raised ribs.
+  const RIB_GW = 0.2, RIB_WALL = 0.045;                      // channel width and wall width (share of one period)
+  const ribPhase = (u, v) => ((v / RIB_TV - u / RIB_TU) % 1 + 1) % 1;
+  function ribDepth(ph) {                                    // 0 on the surface … 1 on the channel floor
+    if (ph >= RIB_GW) return 0;
+    const t = Math.min(ph, RIB_GW - ph) / RIB_WALL;
+    return t >= 1 ? 1 : t * t * (3 - 2 * t);
+  }
   function makeRibTexture() {
-    const gw = 0.24;                                         // groove share of one period
-    return normalMapFromHeight(RIB_TU, RIB_TV, 60, (u, v) => {
-      const ph = ((v / RIB_TV - u / RIB_TU) % 1 + 1) % 1;
-      return ph < gw ? -0.36 * Math.pow(Math.sin(Math.PI * ph / gw), 2) : 0.04 * Math.sin(Math.PI * (ph - gw) / (1 - gw));
-    }, 1.0);
+    return normalMapFromHeight(RIB_TU, RIB_TV, 80, (u, v) => -0.32 * ribDepth(ribPhase(u, v)), 1.0);
+  }
+  // Matching colour map: channel floors and walls are darker (they catch less light), the surface stays neutral.
+  function makeRibShadeTexture() {
+    const W = Math.round(RIB_TU * 80), Hh = Math.round(RIB_TV * 80);
+    const c = document.createElement('canvas');
+    c.width = W; c.height = Hh;
+    const x = c.getContext('2d');
+    const img = x.createImageData(W, Hh);
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+      const u = (i + 0.5) / W * RIB_TU, v = (1 - (j + 0.5) / Hh) * RIB_TV;
+      const k = 255 * (1 - 0.62 * ribDepth(ribPhase(u, v))), p = (j * W + i) * 4;
+      img.data[p] = img.data[p + 1] = img.data[p + 2] = k; img.data[p + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
   }
 
   // Joystick cap: fine diamond knurl.
@@ -1306,7 +1329,7 @@ async function main() {
     bezel: new THREE.MeshPhysicalMaterial({ color: 0x9a9da3, metalness: 0.85, roughness: 0.3 }),
     rim: new THREE.MeshPhysicalMaterial({ color: 0xb9ab8f, metalness: 0.9, roughness: 0.28 }),
     contact: new THREE.MeshPhysicalMaterial({ color: 0xe2e2df, metalness: 0.85, roughness: 0.26 }),
-    grip: new THREE.MeshPhysicalMaterial({ metalness: 0.14, roughness: 0.48, normalMap: makeRibTexture(), normalScale: new THREE.Vector2(1.5, 1.5) }),
+    grip: new THREE.MeshPhysicalMaterial({ metalness: 0.14, roughness: 0.5, map: makeRibShadeTexture(), normalMap: makeRibTexture(), normalScale: new THREE.Vector2(1.2, 1.2) }),
     knurl: new THREE.MeshPhysicalMaterial({ color: 0x2c2d31, metalness: 0.6, roughness: 0.42, normalMap: makeKnurlTexture(), normalScale: new THREE.Vector2(1.4, 1.4) }),
     screenGlass: new THREE.MeshPhysicalMaterial({ color: 0x040405, metalness: 0, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03 }),
     display: new THREE.MeshPhysicalMaterial({ color: 0x000000, metalness: 0, roughness: 0.3, clearcoat: 0.45, clearcoatRoughness: 0.03, emissive: 0xffffff, emissiveIntensity: 0.92 }),

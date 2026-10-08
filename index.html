@@ -906,18 +906,18 @@ async function main() {
   const LOOK_AT = new THREE.Vector3(0, -8, 0);
 
   // ───────────────────────── Dimensions (millimetres) ─────────────────────────
-  // DJI spec for Osmo Pocket 4: 144.2 mm tall, 33.5 mm wide (handle), 2.0″ 16:9 touchscreen.
-  // Everything else is measured from the reference photos (front photo: 0.138 mm per px).
+  // Master reference: DJI's official orthographic front (0.2685 mm/px) and rear (0.2495 mm/px) photos, scaled to the
+  // published 144.2 mm height; depth from the two 3/4 photos. Everything except the height is a photo measurement.
   const H = 144.2;                          // overall height: handle bottom → camera head top
   const Y0 = -H / 2;                        // model is centred on its height; y = Y0 + mm above the bottom
-  const HW = 33.5, HD = 27.5, HR = 5;       // handle width, depth, vertical-edge radius
+  const HW = 33.0, HD = 22.0, HR = 4.5;     // handle width, depth (estimate), vertical-edge radius
   const FZ = HD / 2;                        // handle front face (screen side, +z)
-  const BR = 4.2;                           // bottom edge rounding
-  const SHOULDER = 88.6, SHOULDER_H = 9.9;  // handle top tapers into the pan-motor collar
-  const COLLAR_R = 11.25, COLLAR_TOP = 108.5;
-  const HEAD_Y = Y0 + 132.2, HEAD_Z = 1.5;  // camera head (lens axis) centre
-  const DW = 24.9, DH = 44.3;               // display active area (portrait)
-  const EXT = { x: 18.2, zMin: -17.2, zMax: 18 };   // overall extents (floor shadow)
+  const BR = 6.5;                           // bottom edge rounding
+  const SHOULDER = 89.4, SHOULDER_H = 8.6;  // handle top narrows (x only) into the pan-motor collar
+  const COLLAR_R = 11.15, COLLAR_TOP = 107.1;
+  const HEAD_Y = Y0 + 131.3, HEAD_Z = 3.0;  // camera head (tilt axis / lens) centre
+  const DW = 24.9, DH = 44.3;               // display active area, 2.0″ 16:9 (portrait)
+  const EXT = { x: 17.9, zMin: -14.8, zMax: 15.2 };   // overall extents (floor shadow)
 
   // ───────────────────────── Geometry helpers ─────────────────────────
   function rrect4(w, h, tl, tr, br, bl) {
@@ -1057,130 +1057,94 @@ async function main() {
     ]);
   } catch (e) { /* fonts are optional */ }
 
+  // Camera preview (portrait 9:16): a calm mountain-lake dusk scene with the restrained interface seen in the
+  // reference photos — menu grid, side dots, photo glyph + "9:16", favourite heart. No invented readouts.
   function makeScreenTexture() {
     const cw = 640, ch = Math.round(cw * DH / DW);
     const c = document.createElement('canvas');
     c.width = cw; c.height = ch;
     const x = c.getContext('2d');
     const mm = cw / DW;
+    const hz = ch * 0.56;                                  // horizon / shoreline
 
-    let g = x.createLinearGradient(0, 0, 0, ch);
-    g.addColorStop(0, '#04050c');
-    g.addColorStop(0.4, '#0b1638');
-    g.addColorStop(0.72, '#22102e');
-    g.addColorStop(1, '#080509');
-    x.fillStyle = g; x.fillRect(0, 0, cw, ch);
+    let g = x.createLinearGradient(0, 0, 0, hz);
+    g.addColorStop(0, '#1d2a44');
+    g.addColorStop(0.45, '#4a5878');
+    g.addColorStop(0.78, '#c99a7e');
+    g.addColorStop(1, '#f0c39a');
+    x.fillStyle = g; x.fillRect(0, 0, cw, hz);
+    const glow = x.createRadialGradient(cw * 0.62, hz * 0.96, 0, cw * 0.62, hz * 0.96, cw * 0.7);
+    glow.addColorStop(0, 'rgba(255,214,170,0.55)'); glow.addColorStop(1, 'rgba(255,214,170,0)');
+    x.fillStyle = glow; x.fillRect(0, 0, cw, hz);
 
-    const blob = (px, py, r, rgb, a) => {
-      const rg = x.createRadialGradient(px, py, 0, px, py, r);
-      rg.addColorStop(0, `rgba(${rgb},${a})`);
-      rg.addColorStop(0.55, `rgba(${rgb},${a * 0.35})`);
-      rg.addColorStop(1, `rgba(${rgb},0)`);
-      x.fillStyle = rg; x.fillRect(0, 0, cw, ch);
+    // Mountain: a single volcanic cone with a warm-lit right flank, smaller ridges either side.
+    const peak = (cx, top, halfW, base) => {
+      x.beginPath();
+      x.moveTo(cx - halfW, base);
+      x.bezierCurveTo(cx - halfW * 0.45, base - (base - top) * 0.35, cx - halfW * 0.12, top + (base - top) * 0.06, cx - halfW * 0.03, top);
+      x.lineTo(cx + halfW * 0.03, top);
+      x.bezierCurveTo(cx + halfW * 0.12, top + (base - top) * 0.06, cx + halfW * 0.45, base - (base - top) * 0.35, cx + halfW, base);
+      x.closePath();
     };
-    x.globalCompositeOperation = 'lighter';
-    blob(cw * 0.86, ch * 0.16, cw * 1.0, '46,92,255', 0.5);
-    blob(cw * 0.08, ch * 0.46, cw * 0.85, '128,64,255', 0.3);
-    blob(cw * 0.32, ch * 0.88, cw * 1.1, '255,112,34', 0.6);
-    blob(cw * 0.95, ch * 0.7, cw * 0.65, '255,70,130', 0.2);
+    x.fillStyle = '#3b3f52';
+    x.beginPath(); x.moveTo(0, hz); x.lineTo(0, hz - ch * 0.05); x.quadraticCurveTo(cw * 0.22, hz - ch * 0.08, cw * 0.4, hz - ch * 0.02); x.lineTo(cw, hz - ch * 0.035); x.lineTo(cw, hz); x.fill();
+    peak(cw * 0.52, hz - ch * 0.27, cw * 0.62, hz);
+    g = x.createLinearGradient(cw * 0.3, 0, cw * 0.8, 0);
+    g.addColorStop(0, '#2c3042'); g.addColorStop(0.5, '#4a4552'); g.addColorStop(0.62, '#b0715a'); g.addColorStop(1, '#6e4c4c');
+    x.fillStyle = g; x.fill();
+    // snow streaks near the summit
+    x.strokeStyle = 'rgba(245,235,230,0.55)'; x.lineWidth = 2.2;
+    for (let i = 0; i < 9; i++) {
+      const sx = cw * 0.52 + (i - 4) * 7;
+      x.beginPath(); x.moveTo(sx, hz - ch * 0.265 + Math.abs(i - 4) * 4); x.lineTo(sx + (i - 4) * 9, hz - ch * 0.2 + (i % 3) * 6); x.stroke();
+    }
+    // dark shoreline band
+    x.fillStyle = '#1b1d24';
+    x.fillRect(0, hz - 3, cw, ch * 0.022);
 
-    // Silk ribbons — many faint strokes build a soft, flowing band of light.
-    const ribbon = (yBase, amp, freq, phase, rgbA, rgbB, count, spread) => {
-      x.lineWidth = 1.5;
-      for (let k = 0; k < count; k++) {
-        const p = k / (count - 1);
-        const a = 0.036 * Math.pow(1 - Math.abs(p - 0.5) * 2, 0.6) + 0.01;
-        const col = rgbA.map((v, i) => Math.round(v + (rgbB[i] - v) * p)).join(',');
-        x.strokeStyle = `rgba(${col},${a})`;
-        x.beginPath();
-        for (let i = 0; i <= 80; i++) {
-          const u = i / 80;
-          const px = -60 + u * (cw + 120);
-          const py = ch * yBase
-            + Math.sin(u * Math.PI * freq + phase + p * 1.9) * ch * amp
-            + Math.sin(u * 7.1 + p * 3.1) * ch * 0.012
-            + (p - 0.5) * ch * spread;
-          i === 0 ? x.moveTo(px, py) : x.lineTo(px, py);
-        }
-        x.stroke();
-      }
-    };
-    ribbon(0.68, 0.06, 1.2, 0.4, [255, 140, 60], [255, 210, 170], 120, 0.12);
-    ribbon(0.4, 0.045, 1.5, 2.2, [90, 120, 255], [190, 150, 255], 80, 0.08);
-    x.globalCompositeOperation = 'source-over';
+    // Lake: mirrored scene, darkened, with soft horizontal ripples.
+    x.save();
+    x.translate(0, 2 * hz + ch * 0.022);
+    x.scale(1, -1);
+    x.globalAlpha = 0.72;
+    x.drawImage(c, 0, 0, cw, hz, 0, 0, cw, hz);
+    x.restore();
+    g = x.createLinearGradient(0, hz, 0, ch);
+    g.addColorStop(0, 'rgba(10,12,20,0.25)'); g.addColorStop(1, 'rgba(6,8,14,0.85)');
+    x.fillStyle = g; x.fillRect(0, hz + ch * 0.02, cw, ch - hz);
+    x.strokeStyle = 'rgba(255,230,210,0.07)'; x.lineWidth = 1.2;
+    for (let y = hz + ch * 0.03; y < ch; y += 5 + (y - hz) * 0.03) { x.beginPath(); x.moveTo(0, y); x.lineTo(cw, y); x.stroke(); }
 
-    g = x.createRadialGradient(cw / 2, ch * 0.5, cw * 0.3, cw / 2, ch * 0.5, ch * 0.62);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(0,0,0,0.45)');
-    x.fillStyle = g; x.fillRect(0, 0, cw, ch);
-
-    // Camera UI: 2 × 2 menu grid (top left), battery (top right), mode / format labels at the bottom.
+    // Interface (white, ~94 %)
     x.fillStyle = 'rgba(255,255,255,0.94)';
-    const q = 0.72 * mm, qg = 0.3 * mm, q0 = 1.5 * mm;
+    const q = 0.7 * mm, qg = 0.3 * mm, q0 = 1.4 * mm;
     for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
       x.beginPath(); x.roundRect(q0 + i * (q + qg), q0 + j * (q + qg), q, q, 0.16 * mm); x.fill();
     }
-    const bw = 2.6 * mm, bh = 1.25 * mm, bx = cw - 1.5 * mm - bw - 0.25 * mm, by = q0 + (2 * q + qg - bh) / 2;
-    x.strokeStyle = 'rgba(255,255,255,0.6)'; x.lineWidth = 0.12 * mm;
-    x.beginPath(); x.roundRect(bx, by, bw, bh, 0.3 * mm); x.stroke();
-    x.beginPath(); x.roundRect(bx + 0.22 * mm, by + 0.22 * mm, bw * 0.72, bh - 0.44 * mm, 0.16 * mm); x.fill();
-    x.beginPath(); x.roundRect(bx + bw + 0.08 * mm, by + bh * 0.3, 0.18 * mm, bh * 0.4, 0.08 * mm); x.fill();
-
-    const fy = ch - 1.75 * mm;
+    for (let i = 0; i < 3; i++) { x.beginPath(); x.arc(1.0 * mm, ch * 0.44 + i * 1.0 * mm, 0.28 * mm, 0, Math.PI * 2); x.fill(); }
+    x.beginPath(); x.roundRect(cw - 0.8 * mm, ch * 0.4, 0.22 * mm, 3.2 * mm, 0.11 * mm); x.fill();
+    const fy = ch - 1.6 * mm;
+    // photo glyph
+    const ix = 1.4 * mm, iw = 1.9 * mm, ih = 1.4 * mm;
+    x.beginPath(); x.roundRect(ix, fy - ih / 2, iw, ih, 0.3 * mm); x.fill();
+    x.fillStyle = '#20222a';
+    x.beginPath(); x.arc(ix + iw / 2, fy, 0.42 * mm, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.94)';
     x.font = `600 ${(1.45 * mm).toFixed(1)}px "SF Pro Display", "Helvetica Neue", "Segoe UI", system-ui, sans-serif`;
-    x.textBaseline = 'middle';
-    // video-camera glyph + aspect ratio
-    const ix = 1.5 * mm, iw = 1.9 * mm, ih = 1.35 * mm;
-    x.beginPath(); x.roundRect(ix, fy - ih / 2, iw, ih, 0.28 * mm); x.fill();
-    x.beginPath(); x.moveTo(ix + iw + 0.2 * mm, fy); x.lineTo(ix + iw + 0.85 * mm, fy - 0.55 * mm); x.lineTo(ix + iw + 0.85 * mm, fy + 0.55 * mm); x.closePath(); x.fill();
-    x.textAlign = 'left';
-    x.fillText('9:16', ix + iw + 1.4 * mm, fy);
-    x.textAlign = 'right';
-    x.fillText('4K · 60', cw - 1.5 * mm, fy);
-    // record indicator ring, bottom centre
-    x.strokeStyle = 'rgba(255,255,255,0.9)'; x.lineWidth = 0.22 * mm;
-    x.beginPath(); x.arc(cw / 2, ch - 4.2 * mm, 1.9 * mm, 0, Math.PI * 2); x.stroke();
-    x.fillStyle = '#ff4a1c';
-    x.beginPath(); x.arc(cw / 2, ch - 4.2 * mm, 1.45 * mm, 0, Math.PI * 2); x.fill();
+    x.textBaseline = 'middle'; x.textAlign = 'left';
+    x.fillText('9:16', ix + iw + 0.6 * mm, fy);
+    // heart outline
+    const hx = cw - 2.4 * mm, hs = 0.85 * mm;
+    x.strokeStyle = 'rgba(255,255,255,0.94)'; x.lineWidth = 0.18 * mm; x.lineJoin = 'round';
+    x.beginPath();
+    x.moveTo(hx, fy + hs * 0.8);
+    x.bezierCurveTo(hx - hs * 1.6, fy - hs * 0.1, hx - hs * 0.9, fy - hs * 1.3, hx, fy - hs * 0.45);
+    x.bezierCurveTo(hx + hs * 0.9, fy - hs * 1.3, hx + hs * 1.6, fy - hs * 0.1, hx, fy + hs * 0.8);
+    x.stroke();
 
-    // Everything above is the static picture (`c`). Date and time are composited on top from the
-    // viewer's own system clock and refreshed on every minute change.
-    const out = document.createElement('canvas');
-    out.width = cw; out.height = ch;
-    const o = out.getContext('2d');
-    const tex = new THREE.CanvasTexture(out);
+    const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
-    // Georgian names built by hand — not every browser ships Intl data for 'ka'.
-    const WD = ['კვირა', 'ორშაბათი', 'სამშაბათი', 'ოთხშაბათი', 'ხუთშაბათი', 'პარასკევი', 'შაბათი'];
-    const MO = ['იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი', 'ივლისი', 'აგვისტო', 'სექტემბერი', 'ოქტომბერი', 'ნოემბერი', 'დეკემბერი'];
-    let shownMinute = '';
-    function paintClock(force) {
-      const now = new Date();
-      const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const dateStr = `${WD[now.getDay()]}, ${now.getDate()} ${MO[now.getMonth()]}`;
-      const key = dateStr + ' ' + timeStr;
-      if (!force && key === shownMinute) return;
-      shownMinute = key;
-      o.clearRect(0, 0, cw, ch);
-      o.drawImage(c, 0, 0);
-      o.textAlign = 'center';
-      o.textBaseline = 'alphabetic';
-      o.font = `500 ${Math.round(cw * 0.058)}px "Noto Sans Georgian", "Segoe UI", system-ui, sans-serif`;
-      o.fillStyle = 'rgba(255,255,255,0.82)';
-      o.fillText(dateStr, cw / 2, ch * 0.165);
-      o.font = `600 ${Math.round(cw * 0.3)}px "SF Pro Display", "Helvetica Neue", "Segoe UI", system-ui, sans-serif`;
-      o.fillStyle = 'rgba(255,255,255,0.95)';
-      o.fillText(timeStr, cw / 2, ch * 0.33);
-      tex.needsUpdate = true;
-    }
-    paintClock(true);
-    const scheduleTick = () => setTimeout(() => { paintClock(false); scheduleTick(); }, 60000 - (Date.now() % 60000) + 40);
-    scheduleTick();
-    // Timers are throttled in background tabs, so re-check whenever the page becomes visible again.
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) paintClock(false); });
-    window.addEventListener('focus', () => paintClock(false));
     return tex;
   }
 
@@ -1214,14 +1178,15 @@ async function main() {
     return t;
   }
 
-  // Back panel ribs: diagonal grooves running "\" (seen from the back), 4.1 mm apart.
-  const RIB_SP = 4.1, RIB_ANG = THREE.MathUtils.degToRad(56);
+  // Rear grip ribs: wide ridges with narrow grooves running "/" (seen from the back), ≈ 29° from horizontal,
+  // 4.9 mm apart (5.6 mm vertical pitch, measured on the official rear photo).
+  const RIB_SP = 4.9, RIB_ANG = THREE.MathUtils.degToRad(29);
   const RIB_TU = RIB_SP / Math.sin(RIB_ANG), RIB_TV = RIB_SP / Math.cos(RIB_ANG);
   function makeRibTexture() {
-    const gw = 0.3;                                          // groove share of one period
+    const gw = 0.24;                                         // groove share of one period
     return normalMapFromHeight(RIB_TU, RIB_TV, 60, (u, v) => {
-      const ph = ((u / RIB_TU + v / RIB_TV) % 1 + 1) % 1;
-      return ph < gw ? -0.32 * Math.pow(Math.sin(Math.PI * ph / gw), 2) : 0;
+      const ph = ((v / RIB_TV - u / RIB_TU) % 1 + 1) % 1;
+      return ph < gw ? -0.36 * Math.pow(Math.sin(Math.PI * ph / gw), 2) : 0.04 * Math.sin(Math.PI * (ph - gw) / (1 - gw));
     }, 1.0);
   }
 
@@ -1321,46 +1286,55 @@ async function main() {
 
   // ───────────────────────── Materials ─────────────────────────
   await step('მოდელის აგება…');
+  // Dark graphite (not pure black); parts differ by tone and roughness as in the reference photos.
   const PALETTES = {
-    black: { name: 'Black', body: '#2b2c30', dark: '#1e1f22', cover: '#2a2b2f', ribs: '#303135' }
+    black: {
+      name: 'Black', body: '#4a4c52', grip: '#3c3e44', gimbal: '#3f4146', arm: '#202125',
+      housing: '#3a3c41', screenFrame: '#232428', cover: '#2e2f33'
+    }
   };
 
   const mats = {
-    // (Materials are grouped by feature set — physical / +normal map / +clearcoat / +iridescence / standard —
+    // (Grouped by feature set — physical / +normal map / +clearcoat / +iridescence / standard —
     //  so the whole camera compiles to a handful of shader programs.)
-    body: new THREE.MeshPhysicalMaterial({ metalness: 0.12, roughness: 0.56 }),
-    bodyDark: new THREE.MeshPhysicalMaterial({ metalness: 0.16, roughness: 0.46 }),
-    cover: new THREE.MeshPhysicalMaterial({ metalness: 0.02, roughness: 0.9 }),
-    metal: new THREE.MeshPhysicalMaterial({ color: 0x8f9298, metalness: 0.9, roughness: 0.32 }),
+    body: new THREE.MeshPhysicalMaterial({ metalness: 0.18, roughness: 0.5 }),
+    gimbal: new THREE.MeshPhysicalMaterial({ metalness: 0.18, roughness: 0.46 }),
+    arm: new THREE.MeshPhysicalMaterial({ metalness: 0.1, roughness: 0.42 }),
+    housing: new THREE.MeshPhysicalMaterial({ metalness: 0.2, roughness: 0.4 }),
+    screenFrame: new THREE.MeshPhysicalMaterial({ metalness: 0.15, roughness: 0.34 }),
+    cover: new THREE.MeshPhysicalMaterial({ metalness: 0.02, roughness: 0.86 }),
+    bezel: new THREE.MeshPhysicalMaterial({ color: 0x9a9da3, metalness: 0.85, roughness: 0.3 }),
+    rim: new THREE.MeshPhysicalMaterial({ color: 0xb9ab8f, metalness: 0.9, roughness: 0.28 }),
     contact: new THREE.MeshPhysicalMaterial({ color: 0xe2e2df, metalness: 0.85, roughness: 0.26 }),
-    ribs: new THREE.MeshPhysicalMaterial({ metalness: 0.1, roughness: 0.6, normalMap: makeRibTexture(), normalScale: new THREE.Vector2(1.6, 1.6) }),
-    knurl: new THREE.MeshPhysicalMaterial({ color: 0x2e2f33, metalness: 0.6, roughness: 0.42, normalMap: makeKnurlTexture(), normalScale: new THREE.Vector2(1.4, 1.4) }),
-    frontGlass: new THREE.MeshPhysicalMaterial({ color: 0x040405, metalness: 0, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.02 }),
-    display: new THREE.MeshPhysicalMaterial({ color: 0x000000, metalness: 0, roughness: 0.3, clearcoat: 0.45, clearcoatRoughness: 0.02, emissive: 0xffffff, emissiveIntensity: 1.0 }),
-    sapphire: new THREE.MeshPhysicalMaterial({ color: 0x0b0c10, metalness: 0.25, roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.02 }),
-    barrel: new THREE.MeshStandardMaterial({ color: 0x060607, roughness: 0.5 }),
-    accent: new THREE.MeshStandardMaterial({ color: 0x4a4d55, metalness: 1, roughness: 0.28 }),
+    grip: new THREE.MeshPhysicalMaterial({ metalness: 0.14, roughness: 0.48, normalMap: makeRibTexture(), normalScale: new THREE.Vector2(1.5, 1.5) }),
+    knurl: new THREE.MeshPhysicalMaterial({ color: 0x2c2d31, metalness: 0.6, roughness: 0.42, normalMap: makeKnurlTexture(), normalScale: new THREE.Vector2(1.4, 1.4) }),
+    screenGlass: new THREE.MeshPhysicalMaterial({ color: 0x040405, metalness: 0, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03 }),
+    display: new THREE.MeshPhysicalMaterial({ color: 0x000000, metalness: 0, roughness: 0.3, clearcoat: 0.45, clearcoatRoughness: 0.03, emissive: 0xffffff, emissiveIntensity: 0.92 }),
+    lensPanel: new THREE.MeshPhysicalMaterial({ color: 0x07080b, metalness: 0.3, roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03 }),
+    barrel: new THREE.MeshStandardMaterial({ color: 0x0b0c0e, roughness: 0.5 }),
+    accent: new THREE.MeshStandardMaterial({ color: 0x55585f, metalness: 1, roughness: 0.3 }),
     lensOuter: new THREE.MeshPhysicalMaterial({
-      color: 0x03060a, metalness: 0, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.03,
-      iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [300, 760], envMapIntensity: 1.6
+      color: 0x050a0a, metalness: 0, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.03,
+      iridescence: 0.8, iridescenceIOR: 1.7, iridescenceThicknessRange: [360, 760], envMapIntensity: 1.4
     }),
     lensInner: new THREE.MeshPhysicalMaterial({
-      color: 0x0e3a2a, metalness: 0.35, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02,
-      iridescence: 0.85, iridescenceIOR: 1.6, iridescenceThicknessRange: [220, 540], envMapIntensity: 1.8
+      color: 0x2e5a4c, metalness: 0.3, roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.02,
+      iridescence: 0.6, iridescenceIOR: 1.5, iridescenceThicknessRange: [260, 560], envMapIntensity: 1.6
     }),
     lensCover: new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, metalness: 0, roughness: 0, transmission: 1, thickness: 0.4, ior: 1.77,
-      specularIntensity: 1, iridescence: 0.35, iridescenceIOR: 1.35, iridescenceThicknessRange: [180, 420], envMapIntensity: 1.3
+      color: 0xffffff, metalness: 0, roughness: 0, transmission: 1, thickness: 0.4, ior: 1.6,
+      specularIntensity: 1, envMapIntensity: 1.2
     }),
-    hole: new THREE.MeshStandardMaterial({ color: 0x030303, roughness: 1 }),
-    grille: new THREE.MeshStandardMaterial({ color: 0x4b4d52, roughness: 0.45, metalness: 0.7 }),
+    hole: new THREE.MeshStandardMaterial({ color: 0x050506, roughness: 1 }),
+    grille: new THREE.MeshStandardMaterial({ color: 0x55575c, roughness: 0.45, metalness: 0.7 }),
     tongue: new THREE.MeshStandardMaterial({ color: 0x26272b, roughness: 0.45, metalness: 0.2 }),
-    print: new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.55 }),
-    led: new THREE.MeshStandardMaterial({ color: 0x1f8a3a, roughness: 0.3, emissive: 0x2bff66, emissiveIntensity: 1.4 }),
-    orange: new THREE.MeshStandardMaterial({ color: 0xe8561e, roughness: 0.4, emissive: 0xff4a12, emissiveIntensity: 0.35 }),
-    seam: new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false })
+    print: new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.55 }),
+    led: new THREE.MeshStandardMaterial({ color: 0x1f8a3a, roughness: 0.3, emissive: 0x2bff66, emissiveIntensity: 1.3 }),
+    orange: new THREE.MeshStandardMaterial({ color: 0xd9782a, roughness: 0.4, emissive: 0xff7a1a, emissiveIntensity: 0.25 }),
+    seam: new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false })
   };
   mats.display.emissiveMap = makeScreenTexture();
+  mats.knurl.normalMap.repeat.set(14, 14);                // 0.62 mm diamonds across the joystick top
   const decalMat = (map) => new THREE.MeshStandardMaterial({
     map, transparent: true, depthWrite: false, roughness: 0.55,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
@@ -1368,192 +1342,220 @@ async function main() {
 
   function applyPalette(id) {
     const p = PALETTES[id];
-    mats.body.color.set(p.body);
-    mats.bodyDark.color.set(p.dark);
-    mats.cover.color.set(p.cover);
-    mats.ribs.color.set(p.ribs);
+    for (const k of ['body', 'grip', 'gimbal', 'arm', 'housing', 'screenFrame', 'cover']) mats[k].color.set(p[k]);
     document.getElementById('color-name').textContent = p.name;
   }
   applyPalette('black');
 
   // ───────────────────────── Camera model ─────────────────────────
+  // Hierarchy (pivots on the apparent mechanical axes):
+  //   phone ─ body_shell, rear_grip, front controls, screen_mount ─ screen_housing / screen_glass / screen_display
+  //         └ gimbal_base (pan, y) ─ collar, gimbal_arm, roll (z, disc centre) ─ roll_disc, yoke
+  //                                                              └ tilt (x, drum axis) ─ camera_housing, lens
   const pivot = new THREE.Group();   // floating bob
   const phone = new THREE.Group();   // user rotation (the product; name shared with the viewer code below)
   pivot.add(phone);
   scene.add(pivot);
   const at = (mm) => Y0 + mm;        // height above the bottom → model y
+  const named = (o, name) => { o.name = name; return o; };
 
-  // ── Handle: rounded-rectangle body, rounded bottom, shoulder blending into the round pan-motor collar
+  // ── body_shell: rounded-rectangle handle, rounded bottom, shoulder narrowing into the round collar
   {
     const rings = [];
-    for (let k = 0; k <= 8; k++) {
-      const th = (k / 8) * Math.PI / 2, inset = BR * (1 - Math.sin(th));
-      rings.push([at(BR * (1 - Math.cos(th))), HW / 2 - inset, HD / 2 - inset, HR - inset * 0.6]);
+    for (let k = 0; k <= 10; k++) {
+      const th = (k / 10) * Math.PI / 2, inset = BR * (1 - Math.sin(th));
+      rings.push([at(BR * (1 - Math.cos(th))), HW / 2 - inset, HD / 2 - inset, Math.max(HR - inset * 0.65, 0.6)]);
     }
     rings.push([at(SHOULDER), HW / 2, HD / 2, HR]);
     for (let k = 1; k <= 14; k++) {
       const t = k / 14, e = Math.cos(t * Math.PI / 2);
       rings.push([at(SHOULDER + SHOULDER_H * t), COLLAR_R + (HW / 2 - COLLAR_R) * e, COLLAR_R + (HD / 2 - COLLAR_R) * e, HR + (COLLAR_R - HR) * t]);
     }
-    phone.add(new THREE.Mesh(loft(rings), mats.body));
+    phone.add(named(new THREE.Mesh(loft(rings), mats.body), 'body_shell'));
   }
+  // How far the handle surface recedes from the flat face at lateral offset x (rounded vertical edges).
+  const edgeDrop = (x) => { const e = Math.abs(x) - (HW / 2 - HR); return e > 0 ? HR - Math.sqrt(Math.max(HR * HR - e * e, 0)) : 0; };
 
-  // ── Pan motor collar (with a fine seam where it meets the handle)
+  // ── gimbal_base: pan-motor collar (pan axis = model y) with a fine seam against the handle
+  const gimbalBase = named(new THREE.Group(), 'gimbal_base');
+  phone.add(gimbalBase);
   {
     const y0 = at(SHOULDER + SHOULDER_H) - 0.3, yt = at(COLLAR_TOP);
-    const pts = [[0, y0], [COLLAR_R - 0.1, y0], [COLLAR_R, y0 + 0.4], [COLLAR_R, yt - 2.1], [COLLAR_R - 0.25, yt - 1.1],
-      [COLLAR_R - 0.9, yt - 0.35], [COLLAR_R - 1.8, yt], [0, yt]].map(([r, y]) => new THREE.Vector2(r, y));
-    phone.add(new THREE.Mesh(new THREE.LatheGeometry(pts, 96), mats.body));
-    const seam = new THREE.Mesh(new THREE.CylinderGeometry(COLLAR_R + 0.03, COLLAR_R + 0.03, 0.32, 96, 1, true), mats.hole);
+    const pts = [[0, y0], [COLLAR_R - 0.1, y0], [COLLAR_R, y0 + 0.4], [COLLAR_R, yt - 2.0], [COLLAR_R - 0.2, yt - 1.0],
+      [COLLAR_R - 0.8, yt - 0.3], [COLLAR_R - 1.6, yt], [0, yt]].map(([r, y]) => new THREE.Vector2(r, y));
+    gimbalBase.add(named(new THREE.Mesh(new THREE.LatheGeometry(pts, 96), mats.gimbal), 'gimbal_collar'));
+    const seam = new THREE.Mesh(new THREE.CylinderGeometry(COLLAR_R + 0.03, COLLAR_R + 0.03, 0.3, 96, 1, true), mats.hole);
     seam.position.y = y0 + 0.5;
-    phone.add(seam);
+    gimbalBase.add(seam);
   }
 
-  // ── Camera head: lens housing between the two cheeks of the roll-motor yoke
-  const head = new THREE.Group();
-  head.position.set(0, HEAD_Y, HEAD_Z);
-  phone.add(head);
-  const CB = { w: 22.6, h: 24.2, d: 21 };
+  // ── roll stage: motor disc behind the camera (axis z), yoke reaching forward to the two tilt drums
+  const DISC_R = 10.8, DISC_T = 5.0, DISC_Y = 1.8, YOKE_BACK = HEAD_Z - 12.3;   // disc sits slightly above the lens axis; yoke back face (z)
+  const roll = named(new THREE.Group(), 'gimbal_roll');
+  roll.position.set(0, HEAD_Y, 0);
+  gimbalBase.add(roll);
   {
-    const g = slab(CB.w, CB.h, 6, CB.d, 2.4, 2.4, 14, 5);
-    g.translate(0, 0, -CB.d / 2);
-    head.add(new THREE.Mesh(g, mats.body));
-  }
-  const CHEEK_T = 6.9, YOKE_BACK = -12.3;
-  for (const s of [-1, 1]) {
-    const g = slab(18.8, 21.2, 7.6, CHEEK_T, 1.7, 1.7, 14, 4);   // outline in (z, y), thickness along x
-    g.rotateY(Math.PI / 2);
-    g.translate(s > 0 ? CB.w / 2 - 0.35 : -(CB.w / 2 - 0.35) - CHEEK_T, 0, YOKE_BACK + 9.4);
-    head.add(new THREE.Mesh(g, mats.body));
-    // tilt-axis cap on the outer face
-    const capG = lathe([[6.8, 0], [6.7, 0.2], [6.4, 0.35], [0, 0.35]], 64);
-    const capM = new THREE.Mesh(capG, mats.bodyDark);
-    capM.rotation.y = s * Math.PI / 2;
-    capM.position.set(s * (CB.w / 2 - 0.35 + CHEEK_T - 0.02), 0.6, YOKE_BACK + 9.6);
-    head.add(capM);
-  }
-  {
-    const g = slab(CB.w + 2 * CHEEK_T - 2, 17, 5, 3.2, 1, 1, 12, 3);   // bridge behind the lens housing
-    g.translate(0, -0.6, YOKE_BACK);
-    head.add(new THREE.Mesh(g, mats.body));
-  }
-  // Roll motor disc behind the head, with the four accessory contacts
-  {
-    const disc = new THREE.Mesh(lathe([[0, -6.2], [10.6, -6.2], [11.5, -6.0], [12.1, -5.5], [12.3, -4.6], [12.3, 0], [11.8, 0.4]], 96), mats.body);
-    disc.position.z = YOKE_BACK;
-    head.add(disc);
+    const disc = new THREE.Mesh(lathe([[0, -DISC_T], [DISC_R - 1.1, -DISC_T], [DISC_R - 0.45, -DISC_T + 0.2], [DISC_R - 0.1, -DISC_T + 0.7], [DISC_R, -DISC_T + 1.4], [DISC_R, 0], [DISC_R - 0.4, 0.4]], 96), mats.gimbal);
+    disc.position.set(0, DISC_Y, YOKE_BACK);
+    roll.add(named(disc, 'roll_disc'));
+    // accessory contacts: four silver pills in a dark pill-shaped recess above the centre
+    const slot = new THREE.Mesh(flatShape(rrect(9.4, 2.5, 1.25), 12), mats.hole);
+    slot.rotation.y = Math.PI;
+    slot.position.set(0, DISC_Y + 2.6, YOKE_BACK - DISC_T - 0.01);
     const pins = [];
-    for (let i = 0; i < 4; i++) pins.push(new THREE.CircleGeometry(0.52, 20).translate((i - 1.5) * 1.75, 3.4, 0));
+    for (let i = 0; i < 4; i++) pins.push(flatShape(rrect(1.35, 1.0, 0.45), 6).translate((i - 1.5) * 1.95, 0, 0));
     const pinM = new THREE.Mesh(BGU.mergeGeometries(pins), mats.contact);
-    pinM.rotation.y = Math.PI;                       // face −z
-    pinM.position.z = YOKE_BACK - 6.2 - 0.02;
-    head.add(pinM);
+    pinM.rotation.y = Math.PI;
+    pinM.position.set(0, DISC_Y + 2.6, YOKE_BACK - DISC_T - 0.03);
+    roll.add(slot, pinM);
+    // yoke: back plate + two side arms that carry the tilt drums
+    const back = slab(35.2, 19.5, 3.2, 2.6, 0.8, 0.8, 10, 3);
+    back.translate(0, -1.6, YOKE_BACK);
+    roll.add(named(new THREE.Mesh(back, mats.gimbal), 'yoke_back'));
+    for (const s of [-1, 1]) {
+      const g = slab(13.2, 19.5, 2.6, 4.6, 0.8, 0.8, 10, 3); // outline in (z, y), thickness along x
+      g.rotateY(Math.PI / 2);
+      g.translate(s > 0 ? 12.6 : -17.2, -1.6, YOKE_BACK + 6.6);
+      roll.add(named(new THREE.Mesh(g, mats.gimbal), s > 0 ? 'yoke_arm_right' : 'yoke_arm_left'));
+    }
   }
 
-  // ── Gimbal arm: from the collar top, rising backwards to the roll motor
+  // ── tilt stage: two motor drums (axis x) with flat outer faces, camera housing, lens
+  const tilt = named(new THREE.Group(), 'gimbal_tilt');
+  tilt.position.set(0, 0, HEAD_Z);
+  roll.add(tilt);
+  const CB = { w: 24.8, h: 25.6, d: 22 };
+  for (const s of [-1, 1]) {
+    const drum = new THREE.Mesh(lathe([[10.5, -0.6], [10.5, 0], [10.2, 0.25], [10.2, 0.6], [10.5, 0.9], [10.5, 4.9], [10.1, 5.4], [9.3, 5.6], [0, 5.6]], 96), mats.gimbal);
+    drum.rotation.y = s * Math.PI / 2;                      // local +z → ±x
+    drum.position.set(s * (CB.w / 2 - 0.3), 0, 0);
+    tilt.add(named(drum, s > 0 ? 'tilt_drum_right' : 'tilt_drum_left'));
+    const face = new THREE.Mesh(new THREE.RingGeometry(8.7, 8.95, 96), mats.seam);
+    face.rotation.y = s * Math.PI / 2;
+    face.position.set(s * (CB.w / 2 - 0.3 + 5.62), 0, 0);
+    tilt.add(face);
+  }
   {
-    const P0 = new THREE.Vector3(0, at(105.2), -4.4);
-    const P1 = new THREE.Vector3(0, HEAD_Y - 6, HEAD_Z + YOKE_BACK - 0.6);
+    const g = slab(CB.w, CB.h, 6.2, CB.d, 2.6, 2.6, 16, 6);
+    g.translate(0, 0, -CB.d / 2);
+    tilt.add(named(new THREE.Mesh(g, mats.housing), 'camera_housing'));
+  }
+  // Lens: large glossy black front panel with a thin warm rim, light-grey inner bezel, round optic.
+  {
+    const lens = named(new THREE.Group(), 'lens');
+    lens.position.set(0, 0.6, CB.d / 2);
+    tilt.add(lens);
+    const panelG = slab(22.7, 17.6, 4.2, 2.45, 0.3, 0.3, 14, 3);
+    panelG.translate(0, 0, -2.0);       // back buried in the housing's front bevel
+    lens.add(named(new THREE.Mesh(panelG, mats.lensPanel), 'lens_panel'));
+    const rimS = rrect(22.4, 17.3, 4.0); rimS.holes.push(rrect(22.0, 16.9, 3.8));
+    const rimM = new THREE.Mesh(flatShape(rimS, 14), mats.rim);
+    rimM.position.z = 0.46;
+    lens.add(rimM);
+    const bz = rrect(16.5, 12.6, 3.4); bz.holes.push(rrect(14.9, 11.0, 2.7));
+    const bezelG = new THREE.ExtrudeGeometry(bz, { depth: 0.35, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.12, bevelSegments: 2, curveSegments: 14 });
+    bezelG.translate(0, 0, 0.4);
+    lens.add(named(new THREE.Mesh(bezelG, mats.bezel), 'lens_bezel'));
+    const inner = new THREE.Mesh(flatShape(rrect(15.0, 11.1, 2.75), 14), mats.lensPanel);
+    inner.position.z = 0.47;
+    lens.add(inner);
+    const ring = new THREE.Mesh(lathe([[4.65, 0.47], [4.65, 0.75], [4.45, 0.95], [3.2, 0.95], [3.0, 0.8]], 80), mats.barrel);
+    lens.add(named(ring, 'lens_barrel'));
+    const acc = new THREE.Mesh(new THREE.RingGeometry(2.85, 3.15, 80), mats.accent);
+    acc.position.z = 0.96;
+    const outer = new THREE.Mesh(cap(2.9, 0.42), mats.lensOuter);
+    outer.position.z = 0.62;
+    const innerEl = new THREE.Mesh(cap(1.4, 0.16), mats.lensInner);
+    innerEl.position.z = 0.98;
+    const cover = new THREE.Mesh(new THREE.CircleGeometry(3.2, 72), mats.lensCover);
+    cover.position.z = 1.18;
+    lens.add(acc, named(outer, 'lens_glass'), innerEl, cover);
+  }
+
+  // ── gimbal_arm: rises from the back of the collar, leaning back to the roll disc
+  {
+    const P0 = new THREE.Vector3(0, at(104.6), -2.5);
+    const P1 = new THREE.Vector3(0, HEAD_Y - 5.2, YOKE_BACK - 1.0);
     const dir = P1.clone().sub(P0);
-    const L = dir.length(), ext0 = 5, ext1 = 1.5;               // run into the collar; stay inside the disc
-    const g = slab(14.2, L + ext0 + ext1, 6.2, 7.4, 1.7, 1.7, 12, 4);
-    g.translate(0, (ext1 - ext0) / 2, -3.7);
-    const arm = new THREE.Mesh(g, mats.body);
+    const L = dir.length(), ext0 = 4, ext1 = 0.5;            // into the collar; stays inside the disc
+    const g = slab(14.0, L + ext0 + ext1, 5.2, 7.0, 1.6, 1.6, 12, 4);
+    g.translate(0, (ext1 - ext0) / 2, -3.5);
+    const arm = new THREE.Mesh(g, mats.arm);
     arm.position.copy(P0).add(P1).multiplyScalar(0.5);
     arm.rotation.x = Math.atan2(dir.z, dir.y);
-    phone.add(arm);
+    gimbalBase.add(named(arm, 'gimbal_arm'));
   }
 
-  // ── Lens: rounded-square window with a bright metal frame, coated elements under a clear cover
-  {
-    const lens = new THREE.Group();
-    lens.position.set(0, 0.2, CB.d / 2);
-    head.add(lens);
-    const fs = rrect(15.4, 16.8, 3.8);
-    fs.holes.push(rrect(14.2, 15.6, 3.2));
-    lens.add(new THREE.Mesh(new THREE.ExtrudeGeometry(fs, { depth: 0.38, bevelEnabled: false, curveSegments: 12 }), mats.metal));
-    const win = new THREE.Mesh(flatShape(rrect(14.3, 15.7, 3.25), 12), mats.sapphire);
-    win.position.z = 0.2;
-    const barrel = new THREE.Mesh(new THREE.RingGeometry(3.7, 5.05, 72), mats.barrel);
-    barrel.position.z = 0.22;
-    const acc = new THREE.Mesh(new THREE.RingGeometry(3.45, 3.72, 72), mats.accent);
-    acc.position.z = 0.23;
-    const outer = new THREE.Mesh(cap(3.5, 0.5), mats.lensOuter);
-    outer.position.z = 0.2;
-    const inner = new THREE.Mesh(cap(1.65, 0.2), mats.lensInner);
-    inner.position.z = 0.62;
-    const cover = new THREE.Mesh(new THREE.CircleGeometry(5.05, 72), mats.lensCover);
-    cover.position.z = 0.86;
-    lens.add(win, barrel, acc, outer, inner, cover);
-  }
-
-  // ── Front: 2″ screen module (portrait), status LED, speaker, 5D joystick, record button, lower cover
-  const SM = { w: 30.8, h: 48.6, r: 3.4, y: at(44.2 + 48.6 / 2), back: FZ - 2.4, t: 6.4 };
+  // ── screen_mount: portrait 2″ module (housing, glass, display) — pivot at its centre for a later landscape turn
+  const SM = { w: 30.6, h: 49.1, r: 3.6, y: at(43.8 + 49.1 / 2), back: FZ - 2.3, t: 5.5 };
   const SMF = SM.back + SM.t;                                  // module front plane
   {
-    const g = slab(SM.w, SM.h, SM.r, SM.t, 1.0, 1.0, 12, 4);
-    g.translate(0, SM.y, SM.back);
-    phone.add(new THREE.Mesh(g, mats.bodyDark));
-    const gl = slab(SM.w - 1.3, SM.h - 1.3, SM.r - 0.65, 0.6, 0.3, 0.3, 12, 3);
-    gl.translate(0, SM.y, SMF - 0.45);
-    phone.add(new THREE.Mesh(gl, mats.frontGlass));
-    const dg = flatShape(rrect(DW, DH, 1.4), 16);
+    const mount = named(new THREE.Group(), 'screen_mount');
+    mount.position.set(0, SM.y, 0);
+    phone.add(mount);
+    const g = slab(SM.w, SM.h, SM.r, SM.t, 1.0, 1.0, 14, 4);
+    g.translate(0, 0, SM.back);
+    mount.add(named(new THREE.Mesh(g, mats.screenFrame), 'screen_housing'));
+    const gl = slab(SM.w - 2.2, SM.h - 2.2, SM.r - 1.1, 0.5, 0.25, 0.25, 14, 3);
+    gl.translate(0, 0, SMF - 0.32);
+    mount.add(named(new THREE.Mesh(gl, mats.screenGlass), 'screen_glass'));
+    const dg = flatShape(rrect(DW, DH, 1.2), 16);
     const p = dg.attributes.position, uv = dg.attributes.uv;
     for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / DW + 0.5, p.getY(i) / DH + 0.5);
     uv.needsUpdate = true;
     const disp = new THREE.Mesh(dg, mats.display);
-    disp.position.set(0, SM.y, SMF + 0.17);
-    phone.add(disp);
+    disp.position.z = SMF + 0.2;
+    mount.add(named(disp, 'screen_display'));
   }
+  // Status LED and speaker slot between the screen and the controls
   {
-    const led = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), mats.led);
-    led.position.set(-8.4, at(40.6), FZ + 0.02);
-    const gr = new THREE.Mesh(flatShape(rrect(9.2, 1.9, 0.95), 8), mats.grille);
-    gr.position.set(0.4, at(40.6), FZ + 0.015);
+    const led = new THREE.Mesh(new THREE.CircleGeometry(0.5, 24), mats.led);
+    led.position.set(-9.4, at(40.1), FZ + 0.02);
+    const gr = new THREE.Mesh(flatShape(rrect(8.4, 1.7, 0.85), 8), mats.grille);
+    gr.position.set(0.3, at(40.1), FZ + 0.015);
     const holes = [];
-    for (let r = 0; r < 2; r++) for (let i = 0; i < 14; i++) holes.push(new THREE.CircleGeometry(0.2, 10).translate(-4.0 + i * 0.62 + r * 0.31, (r - 0.5) * 0.62, 0));
+    for (let r = 0; r < 2; r++) for (let i = 0; i < 12; i++) holes.push(new THREE.CircleGeometry(0.19, 10).translate(-3.5 + i * 0.62 + r * 0.31, (r - 0.5) * 0.56, 0));
     const hm = new THREE.Mesh(BGU.mergeGeometries(holes), mats.hole);
-    hm.position.set(0.4, at(40.6), FZ + 0.025);
-    phone.add(led, gr, hm);
+    hm.position.set(0.3, at(40.1), FZ + 0.025);
+    phone.add(named(led, 'status_led'), gr, hm);
   }
-  // 5D joystick: well, stem, knurled cap
+  // joystick: dark well, short stem, knurled cap
   {
-    const j = new THREE.Group();
-    j.position.set(-8.6, at(32.4), FZ);
+    const j = named(new THREE.Group(), 'joystick');
+    j.position.set(-8.5, at(30.3), FZ);
     phone.add(j);
-    const well = new THREE.Mesh(new THREE.RingGeometry(4.45, 5.3, 64), mats.hole);
+    const well = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.5, 64), mats.hole);
     well.position.z = 0.012;
-    const capM = new THREE.Mesh(lathe([[3.0, -0.2], [4.3, 0.5], [4.35, 2.55], [4.22, 2.98], [3.92, 3.22], [3.7, 3.25]], 72), mats.bodyDark);
-    mats.knurl.normalMap.repeat.set(12, 12);                // 0.62 mm diamonds across the 7.4 mm cap
-    const top = new THREE.Mesh(new THREE.CircleGeometry(3.72, 64), mats.knurl);
-    top.position.z = 3.25;
+    const capM = new THREE.Mesh(lathe([[3.2, -0.2], [4.5, 0.4], [4.55, 2.6], [4.42, 3.05], [4.12, 3.3], [3.85, 3.34]], 72), mats.screenFrame);
+    const top = new THREE.Mesh(new THREE.CircleGeometry(3.87, 64), mats.knurl);
+    top.position.z = 3.34;
     j.add(well, capM, top);
   }
-  // Record button with its orange ring
+  // record_button: dark domed button with its orange ring
   {
-    const r = new THREE.Group();
-    r.position.set(8.8, at(32.6), FZ);
+    const r = named(new THREE.Group(), 'record_button');
+    r.position.set(6.8, at(29.6), FZ);
     phone.add(r);
-    r.add(new THREE.Mesh(lathe([[0, 1.0], [3.9, 1.0], [4.3, 0.82], [4.5, 0.5], [4.5, -0.2]].reverse(), 72), mats.bodyDark));
-    const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.72, 72), mats.orange);
-    ring.position.z = 1.012;
+    r.add(new THREE.Mesh(lathe([[4.3, -0.2], [4.3, 0.55], [4.1, 0.95], [3.7, 1.15], [0, 1.25]], 72), mats.screenFrame));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 2.85, 72), mats.orange);
+    ring.position.z = 1.2;
     r.add(ring);
   }
   // Soft-touch lower cover with the engraved OSMO wordmark (notched around the joystick)
   {
-    const s = roundedPoly([[-12.2, 4.2, 3], [12.2, 4.2, 3], [12.2, 38.4, 3], [-2.2, 38.4, 3], [-2.2, 26.8, 3.4], [-12.2, 26.8, 3]]);
+    const s = roundedPoly([[-12.0, 5.0, 3.5], [12.0, 5.0, 3.5], [12.0, 35.4, 3.5], [-2.5, 35.4, 3], [-2.5, 23.6, 3.6], [-12.0, 23.6, 3.2]]);
     const g = new THREE.ExtrudeGeometry(s, { depth: 0.22, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.12, bevelSegments: 2, curveSegments: 10 });
     g.translate(0, Y0, FZ - 0.05);
-    phone.add(new THREE.Mesh(g, mats.cover));
+    phone.add(named(new THREE.Mesh(g, mats.cover), 'lower_cover'));
     const osmo = makeDecal(22, 5, 48, (x, w, h, k) => {
-      x.font = `500 ${(3.25 * k).toFixed(1)}px ${DECAL_FONT}`;
-      if ('letterSpacing' in x) x.letterSpacing = (0.55 * k).toFixed(1) + 'px';
+      x.font = `500 ${(3.2 * k).toFixed(1)}px ${DECAL_FONT}`;
+      if ('letterSpacing' in x) x.letterSpacing = (0.5 * k).toFixed(1) + 'px';
       x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.fillStyle = 'rgba(160,162,168,0.62)';
-      x.fillText('OSMO', w / 2 + 0.27 * k, h / 2);
+      x.fillStyle = 'rgba(150,152,158,0.55)';
+      x.fillText('OSMO', w / 2 + 0.25 * k, h / 2);
     });
     const om = new THREE.Mesh(new THREE.PlaneGeometry(22, 5), decalMat(osmo));
-    om.position.set(0, at(7.4), FZ + 0.36);
+    om.position.set(0, at(9.4), FZ + 0.36);
     phone.add(om);
   }
 
@@ -1562,23 +1564,61 @@ async function main() {
   back.rotation.y = Math.PI;
   back.position.z = -FZ;
   phone.add(back);
+  // rear_grip: rounded panel that wraps onto the rounded vertical edges (vertices follow the shell), ribbed normal map
   {
-    const PW = 24.6, PH = 82.4, pcy = at(3.4 + PH / 2);
-    const g = slab(PW, PH, 3.6, 0.5, 0.18, 0.18, 12, 3);
-    g.translate(0, pcy, -0.12);
-    planarUV(g, RIB_TU, RIB_TV);
-    back.add(new THREE.Mesh(g, mats.ribs));
+    const PW = 29.7, y0 = 2.6, y1 = 89.0, R = 4.2, LIFT = 0.32, NX = 72;
+    const pos = [], uv = [], idx = [];
+    const col = (x) => {                                     // vertical extent of the rounded rectangle at x
+      const e = Math.abs(x) - (PW / 2 - R);
+      const cut = e > 0 ? R - Math.sqrt(Math.max(R * R - e * e, 0)) : 0;
+      return [y0 + cut, y1 - cut];
+    };
+    const surf = (x) => {                                    // shell point + outward normal at lateral offset x
+      const e = Math.abs(x) - (HW / 2 - HR);
+      if (e <= 0) return [0, [0, 0, 1]];
+      const a = Math.asin(Math.min(e / HR, 1));
+      return [-edgeDrop(x), [Math.sign(x) * Math.sin(a), 0, Math.cos(a)]];
+    };
+    for (let i = 0; i <= NX; i++) {
+      const xx = -PW / 2 + (PW * i) / NX;
+      const [ya, yb] = col(xx), [dz, n] = surf(xx);
+      for (const yy of [ya, yb]) {
+        pos.push(xx + n[0] * LIFT, at(yy), dz + n[2] * LIFT);
+        uv.push(xx / RIB_TU, yy / RIB_TV);
+      }
+    }
+    for (let i = 0; i < NX; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    // skirt down to the shell all the way round, so the panel reads as a raised inlay
+    const ring = [];
+    for (let i = 0; i <= NX; i++) ring.push(i * 2);
+    for (let i = NX; i >= 0; i--) ring.push(i * 2 + 1);
+    const base = pos.length / 3;
+    for (const k of ring) {
+      const xx = pos[k * 3], [dz, n] = surf(xx);
+      pos.push(pos[k * 3] - n[0] * (LIFT + 0.2), pos[k * 3 + 1], pos[k * 3 + 2] - n[2] * (LIFT + 0.2));
+      uv.push(uv[k * 2], uv[k * 2 + 1]);
+    }
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length], c = base + i, d = base + (i + 1) % ring.length;
+      idx.push(a, c, b, b, c, d);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    back.add(named(new THREE.Mesh(g, mats.grip), 'rear_grip'));
     // DJI logo (official vector, the same paths as the Zoommer typography), printed white
     const lg = flatShape(svgShapes([...document.querySelectorAll('#zt-pro path')].map(p => p.getAttribute('d'))), 16);
     lg.computeBoundingBox();
-    const bb = lg.boundingBox, k = 9.4 / (bb.max.x - bb.min.x);
+    const bb = lg.boundingBox, k = 10.5 / (bb.max.x - bb.min.x);
     lg.translate(-(bb.min.x + bb.max.x) / 2, -(bb.min.y + bb.max.y) / 2, 0);
     lg.scale(k, k, 1);
     const logo = new THREE.Mesh(lg, mats.print);
-    logo.position.set(0, at(12.2), 0.39);
-    back.add(logo);
-    const mic = new THREE.Mesh(flatShape(rrect(0.9, 1.3, 0.3), 4), mats.hole);
-    mic.position.set(0, at(80.2), 0.395);
+    logo.position.set(0, at(11.7), LIFT + 0.02);
+    back.add(named(logo, 'rear_logo'));
+    const mic = new THREE.Mesh(flatShape(rrect(0.8, 1.0, 0.25), 4), mats.hole);
+    mic.position.set(0, at(83.0), LIFT + 0.025);
     back.add(mic);
   }
 
@@ -1590,46 +1630,46 @@ async function main() {
     phone.add(m);
     return m;
   }
-  // −x: "■ POCKET 4" print (reads top → bottom), card-slot door, slit
+  // −x: "■ POCKET 4" print (reads top → bottom) and the card-slot door
   {
-    const tex = makeDecal(27, 4.4, 40, (x, w, h, k) => {
-      x.fillStyle = '#f4f4f4';
-      x.fillRect(0.5 * k, h / 2 - 0.85 * k, 1.7 * k, 1.7 * k);
-      x.font = `500 ${(2.9 * k).toFixed(1)}px "Segoe UI", "Helvetica Neue", Arial, sans-serif`;
-      if ('letterSpacing' in x) x.letterSpacing = (0.12 * k).toFixed(1) + 'px';
+    const tex = makeDecal(22, 3.6, 48, (x, w, h, k) => {
+      x.fillStyle = '#e9e9e9';
+      x.fillRect(0.4 * k, h / 2 - 0.65 * k, 1.3 * k, 1.3 * k);
+      x.font = `500 ${(2.3 * k).toFixed(1)}px "Segoe UI", "Helvetica Neue", Arial, sans-serif`;
+      if ('letterSpacing' in x) x.letterSpacing = (0.14 * k).toFixed(1) + 'px';
       x.textBaseline = 'middle'; x.textAlign = 'left';
-      x.fillText('POCKET', 3.4 * k, h / 2 + 0.1 * k);
+      x.fillText('POCKET', 2.8 * k, h / 2 + 0.08 * k);
       const pw = x.measureText('POCKET ').width;
-      x.fillStyle = '#e8262c';
-      x.fillText('4', 3.4 * k + pw, h / 2 + 0.1 * k);
+      x.fillStyle = '#e0602a';
+      x.fillText('4', 2.8 * k + pw, h / 2 + 0.08 * k);
     });
-    const g = new THREE.PlaneGeometry(27, 4.4);
+    const g = new THREE.PlaneGeometry(22, 3.6);
     g.rotateZ(-Math.PI / 2);
     g.rotateY(-Math.PI / 2);
     const m = new THREE.Mesh(g, decalMat(tex));
-    m.position.set(-HW / 2 - 0.03, at(70.5), -2.6);
+    m.position.set(-HW / 2 - 0.03, at(73.6), 1.0);
     phone.add(m);
 
-    const door = slab(6.4, 15, 2.2, 0.75, 0.25, 0.25, 8, 2);
+    const door = slab(6.0, 15.0, 2.0, 0.7, 0.25, 0.25, 8, 2);
     door.rotateY(-Math.PI / 2);
     const dm = new THREE.Mesh(door, mats.cover);
-    dm.position.set(-HW / 2 + 0.3, at(30.5), 4.6);
-    phone.add(dm);
-    sideFlat(rrect(1.0, 7.5, 0.5), -1, at(10.5), 6.2, mats.hole);
+    dm.position.set(-HW / 2 + 0.3, at(17.4), -0.4);
+    phone.add(named(dm, 'card_door'));
   }
-  // +x: microSD slot and vent slit near the bottom
-  sideFlat(rrect(1.0, 4.2, 0.5), +1, at(5.6), 6.4, mats.hole);
-  sideFlat(rrect(1.0, 6.8, 0.5), +1, at(12.4), 6.4, mats.hole);
+  // +x: two slits near the bottom, a small hole near the top
+  sideFlat(rrect(0.9, 4.0, 0.45), +1, at(9.0), 3.0, mats.hole);
+  sideFlat(rrect(0.9, 5.6, 0.45), +1, at(15.6), 3.0, mats.hole);
+  sideFlat(rrect(0.8, 0.8, 0.4), +1, at(83.8), 0.0, mats.hole);
 
   // ── Bottom: USB-C (local +z points down, local y → world z)
   {
     const bottom = new THREE.Group();
     bottom.rotation.x = Math.PI / 2;
-    bottom.position.set(0, Y0, 1.2);
+    bottom.position.set(0, Y0, 0);
     phone.add(bottom);
     const ringShape = rrect(9.0, 3.3, 1.65);
     ringShape.holes.push(rrect(8.4, 2.7, 1.35));
-    const pr = new THREE.Mesh(flatShape(ringShape, 16), mats.metal);
+    const pr = new THREE.Mesh(flatShape(ringShape, 16), mats.bezel);
     pr.position.z = 0.015;
     const pin = new THREE.Mesh(flatShape(rrect(8.45, 2.75, 1.37), 16), mats.hole);
     pin.position.z = 0.01;

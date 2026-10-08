@@ -1178,39 +1178,18 @@ async function main() {
     return t;
   }
 
-  // Rear grip ribs: wide ridges with narrow grooves running "/" (seen from the back), ≈ 29° from horizontal,
-  // 4.9 mm apart (5.6 mm vertical pitch, measured on the official rear photo).
-  const RIB_SP = 4.9, RIB_ANG = THREE.MathUtils.degToRad(29);
+  // Rear grip: concave flutes running "/" (seen from the back), separated by sharp crests — each band is a shallow
+  // channel, not a raised rib. ≈ 33° from horizontal, 5.64 mm vertical pitch (4.73 mm apart), measured 1:1 on the
+  // official rear photo (brightness rises across each band and drops sharply at the crest).
+  const RIB_ANG = THREE.MathUtils.degToRad(33), RIB_SP = 5.64 * Math.cos(RIB_ANG);
   const RIB_TU = RIB_SP / Math.sin(RIB_ANG), RIB_TV = RIB_SP / Math.cos(RIB_ANG);
-  // The surface is flat; the grooves are recessed channels (steep walls, flat floor), never raised ribs.
-  const RIB_GW = 0.2, RIB_WALL = 0.045;                      // channel width and wall width (share of one period)
+  const RIB_DEPTH = 0.42;
   const ribPhase = (u, v) => ((v / RIB_TV - u / RIB_TU) % 1 + 1) % 1;
-  function ribDepth(ph) {                                    // 0 on the surface … 1 on the channel floor
-    if (ph >= RIB_GW) return 0;
-    const t = Math.min(ph, RIB_GW - ph) / RIB_WALL;
-    return t >= 1 ? 1 : t * t * (3 - 2 * t);
-  }
   function makeRibTexture() {
-    return normalMapFromHeight(RIB_TU, RIB_TV, 80, (u, v) => -0.32 * ribDepth(ribPhase(u, v)), 1.0);
-  }
-  // Matching colour map: channel floors and walls are darker (they catch less light), the surface stays neutral.
-  function makeRibShadeTexture() {
-    const W = Math.round(RIB_TU * 80), Hh = Math.round(RIB_TV * 80);
-    const c = document.createElement('canvas');
-    c.width = W; c.height = Hh;
-    const x = c.getContext('2d');
-    const img = x.createImageData(W, Hh);
-    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
-      const u = (i + 0.5) / W * RIB_TU, v = (1 - (j + 0.5) / Hh) * RIB_TV;
-      const k = 255 * (1 - 0.62 * ribDepth(ribPhase(u, v))), p = (j * W + i) * 4;
-      img.data[p] = img.data[p + 1] = img.data[p + 2] = k; img.data[p + 3] = 255;
-    }
-    x.putImageData(img, 0, 0);
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    return t;
+    return normalMapFromHeight(RIB_TU, RIB_TV, 80, (u, v) => {
+      const t = 2 * ribPhase(u, v) - 1;                      // −1 … 1 across one flute, crests at ±1
+      return -RIB_DEPTH * (1 - t * t);
+    }, 1.0);
   }
 
   // Joystick cap: fine diamond knurl.
@@ -1329,7 +1308,8 @@ async function main() {
     bezel: new THREE.MeshPhysicalMaterial({ color: 0x9a9da3, metalness: 0.85, roughness: 0.3 }),
     rim: new THREE.MeshPhysicalMaterial({ color: 0xb9ab8f, metalness: 0.9, roughness: 0.28 }),
     contact: new THREE.MeshPhysicalMaterial({ color: 0xe2e2df, metalness: 0.85, roughness: 0.26 }),
-    grip: new THREE.MeshPhysicalMaterial({ metalness: 0.14, roughness: 0.5, map: makeRibShadeTexture(), normalMap: makeRibTexture(), normalScale: new THREE.Vector2(1.2, 1.2) }),
+    grip: new THREE.MeshPhysicalMaterial({ metalness: 0.14, roughness: 0.46, normalMap: makeRibTexture(), normalScale: new THREE.Vector2(1, 1) }),
+    gripSeam: new THREE.MeshStandardMaterial({ color: 0x0b0b0d, roughness: 0.9 }),
     knurl: new THREE.MeshPhysicalMaterial({ color: 0x2c2d31, metalness: 0.6, roughness: 0.42, normalMap: makeKnurlTexture(), normalScale: new THREE.Vector2(1.4, 1.4) }),
     screenGlass: new THREE.MeshPhysicalMaterial({ color: 0x040405, metalness: 0, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03 }),
     display: new THREE.MeshPhysicalMaterial({ color: 0x000000, metalness: 0, roughness: 0.3, clearcoat: 0.45, clearcoatRoughness: 0.03, emissive: 0xffffff, emissiveIntensity: 0.92 }),
@@ -1588,8 +1568,9 @@ async function main() {
   back.position.z = -FZ;
   phone.add(back);
   // rear_grip: rounded panel that wraps onto the rounded vertical edges (vertices follow the shell), ribbed normal map
-  {
-    const PW = 29.7, y0 = 2.6, y1 = 89.0, R = 4.2, LIFT = 0.32, NX = 72;
+  // Panel follows the shell (built column by column across the width); optional skirt down to the shell.
+  function gripPanel(PW, y0, y1, R, LIFT, skirt) {
+    const NX = 72;
     const pos = [], uv = [], idx = [];
     const col = (x) => {                                     // vertical extent of the rounded rectangle at x
       const e = Math.abs(x) - (PW / 2 - R);
@@ -1611,26 +1592,34 @@ async function main() {
       }
     }
     for (let i = 0; i < NX; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-    // skirt down to the shell all the way round, so the panel reads as a raised inlay
+    if (skirt) {
+    // skirt down to the shell all the way round
     const ring = [];
     for (let i = 0; i <= NX; i++) ring.push(i * 2);
     for (let i = NX; i >= 0; i--) ring.push(i * 2 + 1);
     const base = pos.length / 3;
     for (const k of ring) {
       const xx = pos[k * 3], [dz, n] = surf(xx);
-      pos.push(pos[k * 3] - n[0] * (LIFT + 0.2), pos[k * 3 + 1], pos[k * 3 + 2] - n[2] * (LIFT + 0.2));
+      pos.push(pos[k * 3] - n[0] * (LIFT + 0.1), pos[k * 3 + 1], pos[k * 3 + 2] - n[2] * (LIFT + 0.1));
       uv.push(uv[k * 2], uv[k * 2 + 1]);
     }
     for (let i = 0; i < ring.length; i++) {
       const a = ring[i], b = ring[(i + 1) % ring.length], c = base + i, d = base + (i + 1) % ring.length;
       idx.push(a, c, b, b, c, d);
     }
+    }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
-    back.add(named(new THREE.Mesh(g, mats.grip), 'rear_grip'));
+    return g;
+  }
+  {
+    // The grip sits almost flush in the shell, outlined by a fine dark seam (as on the rear photo).
+    const LIFT = 0.12;
+    back.add(named(new THREE.Mesh(gripPanel(29.7, 2.6, 89.0, 4.2, LIFT, true), mats.grip), 'rear_grip'));
+    back.add(named(new THREE.Mesh(gripPanel(30.4, 2.25, 89.35, 4.55, 0.03, false), mats.gripSeam), 'rear_grip_seam'));
     // DJI logo (official vector, the same paths as the Zoommer typography), printed white
     const lg = flatShape(svgShapes([...document.querySelectorAll('#zt-pro path')].map(p => p.getAttribute('d'))), 16);
     lg.computeBoundingBox();
